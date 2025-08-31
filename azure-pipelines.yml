@@ -1,51 +1,36 @@
-# Corrected Go pipeline
-# Build your Go project.
-# Learn more about Go in Azure Pipelines:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/go
-
 trigger:
 - main
 
 pool:
   vmImage: 'ubuntu-latest'
 
-variables:
-  GOBIN:  '$(GOPATH)/bin'
-  GOPATH: '$(system.defaultWorkingDirectory)/gopath'
-  modulePath: '$(GOPATH)/src/github.com/$(Build.Repository.Name)'
-
 steps:
 - task: GoTool@0
-  displayName: 'Install Go 1.13.5'
   inputs:
     version: '1.13.5'
 
 - script: |
-    mkdir -p '$(GOBIN)'
-    mkdir -p '$(GOPATH)/pkg'
-    mkdir -p '$(modulePath)'
-    shopt -s extglob
-    shopt -s dotglob
-    mv !(gopath) '$(modulePath)'
+    # Set up the Go workspace and move code
+    mkdir -p $(GOBIN) $(GOPATH)/pkg $(GOPATH)/src/github.com/$(Build.Repository.Name)
+    mv !(gopath) $(GOPATH)/src/github.com/$(Build.Repository.Name)
     echo '##vso[task.prependpath]$(GOBIN)'
-  displayName: 'Set up the Go workspace'
+  displayName: 'Setup Go Workspace'
+  env:
+    GOPATH: '$(Agent.BuildDirectory)/gopath'
+    GOBIN: '$(Agent.BuildDirectory)/gopath/bin'
 
 - script: |
-    go version
+    # Get dependencies, build, and test
     go get -v -t -d ./...
     go build -v .
     go test -v ./...
-  workingDirectory: '$(modulePath)'
-  displayName: 'Get dependencies, build, and test'
-  
-- task: CopyFiles@2
-  displayName: 'Copy build artifacts'
-  inputs:
-    SourceFolder: '$(modulePath)'
-    Contents: '**'
-    TargetFolder: '$(Build.ArtifactStagingDirectory)'
+  displayName: 'Build and Test'
+  workingDirectory: '$(GOPATH)/src/github.com/$(Build.Repository.Name)'
+  env:
+    GOPATH: '$(Agent.BuildDirectory)/gopath'
 
 - task: PublishBuildArtifacts@1
-  displayName: 'Publish build artifacts'
   inputs:
-     artifactName: drop
+    artifactName: 'drop'
+    pathToPublish: '$(Agent.BuildDirectory)/gopath/src/github.com/$(Build.Repository.Name)'
+  displayName: 'Publish Artifacts'
